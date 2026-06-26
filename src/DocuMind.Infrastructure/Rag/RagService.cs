@@ -52,7 +52,11 @@ public sealed class RagService(
             chunks = chunks.Where(c => c.DocumentId == documentId);
         }
 
+        // Order by the cosine-distance expression directly (so EF translates it to
+        // the pgvector `<=>` operator and uses the HNSW index), then project.
         var hits = await chunks
+            .OrderBy(c => c.Embedding!.CosineDistance(query))
+            .Take(topK)
             .Select(c => new RetrievedChunk(
                 c.DocumentId,
                 c.Document.FileName,
@@ -60,8 +64,6 @@ public sealed class RagService(
                 c.PageNumber,
                 c.Content,
                 c.Embedding!.CosineDistance(query)))
-            .OrderBy(x => x.Distance)
-            .Take(topK)
             .ToListAsync(cancellationToken);
 
         logger.LogInformation(
@@ -90,7 +92,7 @@ public sealed class RagService(
         var answer = response.Text;
 
         var citations = hits
-            .Select(h => new Citation(h.DocumentId, h.FileName, h.ChunkIndex, h.PageNumber, Snippet(h.Content)))
+            .Select(h => new Citation(h.DocumentId, h.FileName, h.ChunkIndex, h.PageNumber, Snippet(h.Content), h.Content))
             .ToList();
 
         logger.LogInformation("RAG answer generated using {Used} chunk(s)", citations.Count);

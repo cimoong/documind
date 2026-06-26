@@ -1,0 +1,162 @@
+@page "/ask"
+@rendermode InteractiveServer
+@using DocuMind.Core.Documents
+@using DocuMind.Core.Rag
+@inject IRagService RagService
+@inject IDocumentReadService DocumentReadService
+@inject ILogger<Ask> Logger
+
+<PageTitle>Ask · DocuMind</PageTitle>
+
+<h1>Ask</h1>
+<p class="text-muted">Ask a question; answers are grounded only in your indexed documents.</p>
+
+<div class="card mb-4" style="max-width: 760px;">
+    <div class="card-body">
+        <div class="mb-3">
+            <label class="form-label fw-semibold" for="question">Question</label>
+            <textarea id="question" class="form-control" rows="3" @bind="question" @bind:event="oninput"
+                      placeholder="e.g. What are the steps described in the document?" disabled="@isAsking"></textarea>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label fw-semibold" for="scope">Search in</label>
+            <select id="scope" class="form-select" @bind="selectedDocumentId" disabled="@isAsking">
+                <option value="">All documents</option>
+                @if (documents is not null)
+                {
+                    @foreach (var doc in documents)
+                    {
+                        <option value="@doc.Id">@doc.FileName</option>
+                    }
+                }
+            </select>
+        </div>
+
+        <button class="btn btn-primary" @onclick="SubmitAsync" disabled="@(isAsking || string.IsNullOrWhiteSpace(question))">
+            @if (isAsking)
+            {
+                <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                <span>Thinking…</span>
+            }
+            else
+            {
+                <span>Ask</span>
+            }
+        </button>
+    </div>
+</div>
+
+@if (errorMessage is not null)
+{
+    <div class="alert alert-danger" role="alert">@errorMessage</div>
+}
+
+@if (response is not null)
+{
+    <div class="card mb-3" style="max-width: 760px;">
+        <div class="card-body">
+            <h2 class="h5">Answer</h2>
+            <p style="white-space: pre-wrap;">@response.Answer</p>
+            <small class="text-muted">Used @response.UsedChunks chunk(s) as context.</small>
+        </div>
+    </div>
+
+    @if (response.Citations.Count > 0)
+    {
+        <h2 class="h5" style="max-width: 760px;">Citations</h2>
+        <div style="max-width: 760px;">
+            @for (var i = 0; i < response.Citations.Count; i++)
+            {
+                var index = i;
+                var citation = response.Citations[index];
+                <div class="card mb-2">
+                    <div class="card-body py-2">
+                        <div class="fw-semibold">
+                            [Source @(index + 1)] @citation.FileName
+                            @if (citation.PageNumber is int pageNo)
+                            {
+                                <span class="text-muted">· page @pageNo</span>
+                            }
+                            <span class="text-muted">· chunk #@citation.ChunkIndex</span>
+                        </div>
+                        <div class="mt-1" style="white-space: pre-wrap;">
+                            @(expanded.Contains(index) ? citation.Context : citation.Snippet)
+                        </div>
+                        @if (citation.Context.Length > citation.Snippet.Length)
+                        {
+                            <button class="btn btn-link btn-sm px-0" @onclick="() => ToggleExpand(index)">
+                                @(expanded.Contains(index) ? "Show less" : "Show full context")
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    private string? question;
+    private string selectedDocumentId = "";
+    private bool isAsking;
+    private AskResponse? response;
+    private string? errorMessage;
+    private IReadOnlyList<DocumentSummary>? documents;
+    private readonly HashSet<int> expanded = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            documents = await DocumentReadService.GetDocumentsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load documents for the Ask page");
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (string.IsNullOrWhiteSpace(question))
+        {
+            return;
+        }
+
+        isAsking = true;
+        errorMessage = null;
+        response = null;
+        expanded.Clear();
+
+        try
+        {
+            Guid? documentId = Guid.TryParse(selectedDocumentId, out var id) ? id : null;
+            response = await RagService.AskAsync(new AskRequest(question!, TopK: 5, DocumentId: documentId));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Ask failed");
+            errorMessage = FriendlyError(ex);
+        }
+        finally
+        {
+            isAsking = false;
+        }
+    }
+
+    private void ToggleExpand(int index)
+    {
+        if (!expanded.Remove(index))
+        {
+            expanded.Add(index);
+        }
+    }
+
+    private static string FriendlyError(Exception ex) => ex switch
+    {
+        System.ClientModel.ClientResultException => "The AI service rejected the request. Check that the Gemini API key is configured.",
+        HttpRequestException or TaskCanceledException => "Could not reach the AI service. Please check your connection and try again.",
+        _ => "Something went wrong while answering. Please try again."
+    };
+}
