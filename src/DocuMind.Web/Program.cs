@@ -1,6 +1,7 @@
 using System.ClientModel;
 using DocuMind.Core.Entities;
 using DocuMind.Core.Ingestion;
+using DocuMind.Core.Rag;
 using DocuMind.Infrastructure;
 using DocuMind.Web;
 using DocuMind.Web.Components;
@@ -123,5 +124,31 @@ app.MapPost("/api/documents", async (
 .DisableAntiforgery() // API endpoint: not a browser form post.
 .WithName("UploadDocument")
 .WithTags("Documents");
+
+// Ask a question, answered strictly from retrieved document chunks, with citations.
+app.MapPost("/api/ask", async (
+    AskRequest request,
+    IRagService ragService,
+    ILoggerFactory loggerFactory,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Question))
+    {
+        return Results.BadRequest(new { error = "The 'question' field is required." });
+    }
+
+    var logger = loggerFactory.CreateLogger("Ask");
+    try
+    {
+        var response = await ragService.AskAsync(request, cancellationToken);
+        return Results.Ok(response);
+    }
+    catch (Exception ex) when (ex is ClientResultException or HttpRequestException or TaskCanceledException)
+    {
+        return AiErrorMapping.ToProblem(ex, logger);
+    }
+})
+.WithName("Ask")
+.WithTags("RAG");
 
 app.Run();
