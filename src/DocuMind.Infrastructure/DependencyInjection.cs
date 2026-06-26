@@ -1,4 +1,6 @@
+using DocuMind.Core.Ingestion;
 using DocuMind.Infrastructure.Ai;
+using DocuMind.Infrastructure.Ingestion;
 using DocuMind.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -28,6 +30,10 @@ public static class DependencyInjection
 
         // Gemini chat + embedding clients (via OpenAI-compatible endpoint).
         services.AddGeminiAi(configuration);
+
+        // Document ingestion pipeline.
+        services.AddScoped<IChunkingService, ChunkingService>();
+        services.AddScoped<IIngestionService, IngestionService>();
 
         return services;
     }
