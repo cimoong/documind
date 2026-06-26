@@ -1,3 +1,4 @@
+using DocuMind.Infrastructure.Ai;
 using DocuMind.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -24,6 +25,9 @@ public static class DependencyInjection
 
         services.AddDbContext<DocuMindDbContext>(options =>
             options.UseNpgsql(connectionString, npgsql => npgsql.UseVector()));
+
+        // Gemini chat + embedding clients (via OpenAI-compatible endpoint).
+        services.AddGeminiAi(configuration);
 
         return services;
     }
