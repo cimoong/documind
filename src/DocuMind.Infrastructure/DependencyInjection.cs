@@ -1,7 +1,9 @@
 using DocuMind.Core.Ingestion;
+using DocuMind.Core.Rag;
 using DocuMind.Infrastructure.Ai;
 using DocuMind.Infrastructure.Ingestion;
 using DocuMind.Infrastructure.Persistence;
+using DocuMind.Infrastructure.Rag;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -34,6 +36,9 @@ public static class DependencyInjection
         // Document ingestion pipeline.
         services.AddScoped<IChunkingService, ChunkingService>();
         services.AddScoped<IIngestionService, IngestionService>();
+
+        // Retrieval-augmented Q&A.
+        services.AddScoped<IRagService, RagService>();
 
         return services;
     }
