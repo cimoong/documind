@@ -1,0 +1,148 @@
+@page "/documents"
+@rendermode InteractiveServer
+@using DocuMind.Core.Documents
+@using DocuMind.Core.Ingestion
+@inject IIngestionService IngestionService
+@inject IDocumentReadService DocumentReadService
+@inject ILogger<Documents> Logger
+
+<PageTitle>Documents · DocuMind</PageTitle>
+
+<h1>Documents</h1>
+<p class="text-muted">Upload a PDF or .txt file to index it for question answering.</p>
+
+<div class="card mb-4" style="max-width: 640px;">
+    <div class="card-body">
+        <label class="form-label fw-semibold">Upload document</label>
+        <InputFile OnChange="HandleUpload" accept=".pdf,.txt" disabled="@isUploading" class="form-control" />
+        <small class="text-muted d-block mt-1">Supported: PDF and .txt · max 20 MB</small>
+
+        @if (isUploading)
+        {
+            <div class="d-flex align-items-center mt-3">
+                <div class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></div>
+                <span>Uploading and indexing <strong>@uploadingFileName</strong>… this can take a moment.</span>
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(statusMessage))
+        {
+            <div class="alert @(statusIsError ? "alert-danger" : "alert-success") mt-3 mb-0" role="alert">
+                @statusMessage
+            </div>
+        }
+    </div>
+</div>
+
+<h2 class="h4">Indexed documents</h2>
+
+@if (documents is null)
+{
+    <p><em>Loading…</em></p>
+}
+else if (documents.Count == 0)
+{
+    <p class="text-muted">No documents yet. Upload one above to get started.</p>
+}
+else
+{
+    <table class="table table-sm align-middle">
+        <thead>
+            <tr>
+                <th>File name</th>
+                <th>Uploaded (UTC)</th>
+                <th class="text-end">Chunks</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var doc in documents)
+            {
+                <tr>
+                    <td>@doc.FileName</td>
+                    <td>@doc.UploadedAtUtc.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td class="text-end">@doc.TotalChunks</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private const long MaxUploadBytes = 20 * 1024 * 1024;
+
+    private bool isUploading;
+    private string? uploadingFileName;
+    private string? statusMessage;
+    private bool statusIsError;
+    private IReadOnlyList<DocumentSummary>? documents;
+
+    protected override async Task OnInitializedAsync() => await LoadDocumentsAsync();
+
+    private async Task LoadDocumentsAsync()
+    {
+        try
+        {
+            documents = await DocumentReadService.GetDocumentsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load documents");
+            statusMessage = "Could not load the document list. Please try again.";
+            statusIsError = true;
+        }
+    }
+
+    private async Task HandleUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        statusMessage = null;
+
+        var isPdf = file.Name.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
+        var isTxt = file.Name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase);
+        if (!isPdf && !isTxt)
+        {
+            SetStatus("Unsupported file type. Please upload a PDF or .txt file.", isError: true);
+            return;
+        }
+
+        if (file.Size > MaxUploadBytes)
+        {
+            SetStatus($"File is too large ({file.Size / (1024 * 1024)} MB). The limit is 20 MB.", isError: true);
+            return;
+        }
+
+        isUploading = true;
+        uploadingFileName = file.Name;
+
+        try
+        {
+            await using var stream = file.OpenReadStream(MaxUploadBytes);
+            var result = await IngestionService.IngestAsync(stream, file.Name, file.ContentType);
+            SetStatus($"Indexed \"{result.FileName}\" into {result.ChunkCount} chunk(s).", isError: false);
+            await LoadDocumentsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Upload failed for {FileName}", file.Name);
+            SetStatus(FriendlyError(ex), isError: true);
+        }
+        finally
+        {
+            isUploading = false;
+            uploadingFileName = null;
+        }
+    }
+
+    private void SetStatus(string message, bool isError)
+    {
+        statusMessage = message;
+        statusIsError = isError;
+    }
+
+    private static string FriendlyError(Exception ex) => ex switch
+    {
+        System.ClientModel.ClientResultException => "The AI service rejected the request. Check that the Gemini API key is configured.",
+        HttpRequestException or TaskCanceledException => "Could not reach the AI service. Please check your connection and try again.",
+        _ => "Something went wrong while indexing the document. Please try again."
+    };
+}

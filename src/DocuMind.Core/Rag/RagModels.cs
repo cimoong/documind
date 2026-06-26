@@ -7,12 +7,15 @@ namespace DocuMind.Core.Rag;
 public sealed record AskRequest(string Question, int? TopK = null, Guid? DocumentId = null);
 
 /// <summary>A source chunk that was supplied as context for the answer.</summary>
+/// <param name="Snippet">Short preview for compact display.</param>
+/// <param name="Context">Full chunk text, e.g. for an expandable "read more" view.</param>
 public sealed record Citation(
     Guid DocumentId,
     string FileName,
     int ChunkIndex,
     int? PageNumber,
-    string Snippet);
+    string Snippet,
+    string Context);
 
 /// <summary>The grounded answer plus its citations.</summary>
 public sealed record AskResponse(

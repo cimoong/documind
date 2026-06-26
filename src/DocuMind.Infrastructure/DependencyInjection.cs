@@ -1,6 +1,8 @@
+using DocuMind.Core.Documents;
 using DocuMind.Core.Ingestion;
 using DocuMind.Core.Rag;
 using DocuMind.Infrastructure.Ai;
+using DocuMind.Infrastructure.Documents;
 using DocuMind.Infrastructure.Ingestion;
 using DocuMind.Infrastructure.Persistence;
 using DocuMind.Infrastructure.Rag;
@@ -39,6 +41,9 @@ public static class DependencyInjection
 
         // Retrieval-augmented Q&A.
         services.AddScoped<IRagService, RagService>();
+
+        // Read-only document queries (for the UI).
+        services.AddScoped<IDocumentReadService, DocumentReadService>();
 
         return services;
     }
