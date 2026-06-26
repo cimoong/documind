@@ -31,8 +31,8 @@ startup via `db/init/01-enable-pgvector.sql`.
 | Container | `documind-db` |
 | Database | `documind` |
 | User / password | `postgres` / `postgres` (local only) |
-| Host port | `5432` |
-| Connection string | `Host=localhost;Port=5432;Database=documind;Username=postgres;Password=postgres` |
+| Host port | `5433` (mapped to the container's `5432`; host `5432` is left for a native PostgreSQL install) |
+| Connection string | `Host=localhost;Port=5433;Database=documind;Username=postgres;Password=postgres` |
 
 ### Start / stop
 
