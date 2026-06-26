@@ -1,6 +1,8 @@
 using System.ClientModel;
 using DocuMind.Core.Entities;
+using DocuMind.Core.Ingestion;
 using DocuMind.Infrastructure;
+using DocuMind.Web;
 using DocuMind.Web.Components;
 using Microsoft.Extensions.AI;
 
@@ -13,10 +15,19 @@ builder.Services.AddRazorComponents()
 // DocuMind data layer (EF Core + PostgreSQL/pgvector).
 builder.Services.AddInfrastructure(builder.Configuration);
 
+// Swagger / OpenAPI for trying the API endpoints.
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-if (!app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+else
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
@@ -52,35 +63,65 @@ app.MapGet("/health/ai", async (
             expected
         });
     }
-    // Gemini returns 401/403 for auth, but also 400 with an "API key" message
-    // when the key is missing/invalid — treat all of these as auth failures.
-    catch (ClientResultException ex) when (
-        ex.Status is 401 or 403 ||
-        (ex.Status == 400 && ex.Message.Contains("API key", StringComparison.OrdinalIgnoreCase)))
+    catch (Exception ex) when (ex is ClientResultException or HttpRequestException or TaskCanceledException)
     {
-        logger.LogError(ex, "Gemini authentication failed");
-        return Results.Problem(
-            title: "AI authentication failed",
-            detail: "Gemini rejected the API key (HTTP " + ex.Status + "). Check that " +
-                    "\"Gemini:ApiKey\" is set correctly via user-secrets.",
-            statusCode: StatusCodes.Status401Unauthorized);
-    }
-    catch (ClientResultException ex)
-    {
-        logger.LogError(ex, "Gemini request failed with status {Status}", ex.Status);
-        return Results.Problem(
-            title: "AI request failed",
-            detail: $"Gemini returned HTTP {ex.Status}: {ex.Message}",
-            statusCode: StatusCodes.Status502BadGateway);
-    }
-    catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
-    {
-        logger.LogError(ex, "Could not reach Gemini");
-        return Results.Problem(
-            title: "AI service unreachable",
-            detail: "Could not reach the Gemini endpoint. Check network connectivity. " + ex.Message,
-            statusCode: StatusCodes.Status504GatewayTimeout);
+        return AiErrorMapping.ToProblem(ex, logger);
     }
 });
+
+// Upload a document (PDF or .txt) and ingest it: extract -> chunk -> embed -> store.
+const long maxUploadBytes = 20 * 1024 * 1024; // 20 MB
+app.MapPost("/api/documents", async (
+    IFormFile? file,
+    IIngestionService ingestionService,
+    ILoggerFactory loggerFactory,
+    CancellationToken cancellationToken) =>
+{
+    var logger = loggerFactory.CreateLogger("DocumentUpload");
+
+    if (file is null || file.Length == 0)
+    {
+        return Results.BadRequest(new { error = "No file was uploaded." });
+    }
+
+    if (file.Length > maxUploadBytes)
+    {
+        return Results.BadRequest(new
+        {
+            error = $"File exceeds the {maxUploadBytes / (1024 * 1024)} MB limit.",
+            sizeBytes = file.Length
+        });
+    }
+
+    var fileName = file.FileName;
+    var contentType = file.ContentType ?? string.Empty;
+    var isPdf = contentType.Contains("pdf", StringComparison.OrdinalIgnoreCase)
+                || fileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
+    var isText = contentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase)
+                 || fileName.EndsWith(".txt", StringComparison.OrdinalIgnoreCase);
+
+    if (!isPdf && !isText)
+    {
+        return Results.BadRequest(new
+        {
+            error = "Unsupported file type. Only PDF (.pdf) and plain text (.txt) are supported.",
+            received = string.IsNullOrWhiteSpace(contentType) ? fileName : contentType
+        });
+    }
+
+    try
+    {
+        await using var stream = file.OpenReadStream();
+        var result = await ingestionService.IngestAsync(stream, fileName, contentType, cancellationToken);
+        return Results.Ok(result);
+    }
+    catch (Exception ex) when (ex is ClientResultException or HttpRequestException or TaskCanceledException)
+    {
+        return AiErrorMapping.ToProblem(ex, logger);
+    }
+})
+.DisableAntiforgery() // API endpoint: not a browser form post.
+.WithName("UploadDocument")
+.WithTags("Documents");
 
 app.Run();
