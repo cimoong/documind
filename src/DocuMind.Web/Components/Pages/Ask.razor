@@ -16,6 +16,7 @@
         <div class="mb-3">
             <label class="form-label fw-semibold" for="question">Question</label>
             <textarea id="question" class="form-control" rows="3" @bind="question" @bind:event="oninput"
+                      maxlength="@MaxQuestionLength"
                       placeholder="e.g. What are the steps described in the document?" disabled="@isAsking"></textarea>
         </div>
 
@@ -97,6 +98,8 @@
 }
 
 @code {
+    private const int MaxQuestionLength = 4000;
+
     private string? question;
     private string selectedDocumentId = "";
     private bool isAsking;
