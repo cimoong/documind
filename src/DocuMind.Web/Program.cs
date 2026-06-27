@@ -20,6 +20,10 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// Clean ProblemDetails responses + a global safety net so no stack trace leaks.
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -30,7 +34,8 @@ if (app.Environment.IsDevelopment())
 }
 else
 {
-    app.UseExceptionHandler("/Error", createScopeForErrors: true);
+    // Global exception handler -> ProblemDetails (no stack traces to clients).
+    app.UseExceptionHandler();
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
@@ -64,7 +69,7 @@ app.MapGet("/health/ai", async (
             expected
         });
     }
-    catch (Exception ex) when (ex is ClientResultException or HttpRequestException or TaskCanceledException)
+    catch (Exception ex)
     {
         return AiErrorMapping.ToProblem(ex, logger);
     }
@@ -116,7 +121,7 @@ app.MapPost("/api/documents", async (
         var result = await ingestionService.IngestAsync(stream, fileName, contentType, cancellationToken);
         return Results.Ok(result);
     }
-    catch (Exception ex) when (ex is ClientResultException or HttpRequestException or TaskCanceledException)
+    catch (Exception ex)
     {
         return AiErrorMapping.ToProblem(ex, logger);
     }
@@ -137,13 +142,22 @@ app.MapPost("/api/ask", async (
         return Results.BadRequest(new { error = "The 'question' field is required." });
     }
 
+    const int maxQuestionLength = 4000;
+    if (request.Question.Length > maxQuestionLength)
+    {
+        return Results.BadRequest(new
+        {
+            error = $"The question is too long ({request.Question.Length} characters). The limit is {maxQuestionLength}.",
+        });
+    }
+
     var logger = loggerFactory.CreateLogger("Ask");
     try
     {
         var response = await ragService.AskAsync(request, cancellationToken);
         return Results.Ok(response);
     }
-    catch (Exception ex) when (ex is ClientResultException or HttpRequestException or TaskCanceledException)
+    catch (Exception ex)
     {
         return AiErrorMapping.ToProblem(ex, logger);
     }

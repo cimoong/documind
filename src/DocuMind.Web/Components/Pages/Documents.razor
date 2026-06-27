@@ -118,7 +118,12 @@ else
         {
             await using var stream = file.OpenReadStream(MaxUploadBytes);
             var result = await IngestionService.IngestAsync(stream, file.Name, file.ContentType);
-            SetStatus($"Indexed \"{result.FileName}\" into {result.ChunkCount} chunk(s).", isError: false);
+            var message = $"Indexed \"{result.FileName}\" into {result.ChunkCount} chunk(s).";
+            if (result.SkippedChunks > 0)
+            {
+                message += $" {result.SkippedChunks} chunk(s) were skipped due to embedding errors.";
+            }
+            SetStatus(message, isError: false);
             await LoadDocumentsAsync();
         }
         catch (Exception ex)

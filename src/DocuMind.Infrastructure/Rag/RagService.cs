@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using DocuMind.Core.Rag;
 using DocuMind.Infrastructure.Persistence;
@@ -88,7 +89,11 @@ public sealed class RagService(
         };
 
         // d. Generate.
+        var stopwatch = Stopwatch.StartNew();
         var response = await chatClient.GetResponseAsync(messages, cancellationToken: cancellationToken);
+        logger.LogInformation(
+            "Chat generation completed in {ElapsedMs} ms (model={Model})",
+            stopwatch.ElapsedMilliseconds, "gemini-2.5-flash");
         var answer = response.Text;
 
         var citations = hits

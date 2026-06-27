@@ -24,22 +24,35 @@ public static class AiErrorMapping
                             "\"Gemini:ApiKey\" is set correctly via user-secrets.",
                     statusCode: StatusCodes.Status401Unauthorized);
 
+            // Rate limited even after retries.
+            case ClientResultException { Status: 429 } cre:
+                logger.LogWarning(cre, "Gemini rate limit reached");
+                return Results.Problem(
+                    title: "AI rate limit reached",
+                    detail: "The AI service is rate limiting requests. Please wait a moment and try again.",
+                    statusCode: StatusCodes.Status429TooManyRequests);
+
             case ClientResultException cre:
                 logger.LogError(cre, "Gemini request failed with status {Status}", cre.Status);
                 return Results.Problem(
                     title: "AI request failed",
-                    detail: $"Gemini returned HTTP {cre.Status}: {cre.Message}",
+                    detail: $"The AI service returned an error (HTTP {cre.Status}).",
                     statusCode: StatusCodes.Status502BadGateway);
 
-            case HttpRequestException or TaskCanceledException:
+            case HttpRequestException or TaskCanceledException or TimeoutException:
                 logger.LogError(ex, "Could not reach Gemini");
                 return Results.Problem(
                     title: "AI service unreachable",
-                    detail: "Could not reach the Gemini endpoint. Check network connectivity. " + ex.Message,
+                    detail: "Could not reach the AI service. Please check connectivity and try again.",
                     statusCode: StatusCodes.Status504GatewayTimeout);
 
+            // Any other failure (e.g. database down): generic, no stack trace leak.
             default:
-                throw ex;
+                logger.LogError(ex, "Unexpected error handling the request");
+                return Results.Problem(
+                    title: "Unexpected error",
+                    detail: "An unexpected error occurred. Please try again.",
+                    statusCode: StatusCodes.Status500InternalServerError);
         }
     }
 }

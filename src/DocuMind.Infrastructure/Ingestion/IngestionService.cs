@@ -1,3 +1,5 @@
+using System.ClientModel;
+using System.Diagnostics;
 using DocuMind.Core.Entities;
 using DocuMind.Core.Ingestion;
 using DocuMind.Infrastructure.Persistence;
@@ -49,75 +51,138 @@ public sealed class IngestionService(
         var drafts = chunkingService.Chunk(pages);
         logger.LogInformation("Produced {ChunkCount} chunk(s) for {FileName}", drafts.Count, fileName);
 
-        // 3. Embed (batched).
-        var embeddings = await EmbedAsync(drafts, cancellationToken);
+        // 3. Embed (batched, tolerant of per-chunk failures).
+        var embedded = await EmbedAsync(drafts, cancellationToken);
 
-        // 4. Persist.
+        // If nothing could be embedded at all (e.g. auth/connectivity), surface
+        // the error instead of saving an empty document.
+        if (drafts.Count > 0 && embedded.Successes.Count == 0)
+        {
+            throw embedded.LastError ?? new InvalidOperationException("Embedding failed for all chunks.");
+        }
+
+        // 4. Persist (only the chunks that were successfully embedded).
         var document = new Document
         {
             Id = Guid.NewGuid(),
             FileName = fileName,
             ContentType = isPdf ? "application/pdf" : "text/plain",
             UploadedAtUtc = DateTime.UtcNow,
-            TotalChunks = drafts.Count,
+            TotalChunks = embedded.Successes.Count,
         };
 
-        for (var i = 0; i < drafts.Count; i++)
+        foreach (var (draft, vector) in embedded.Successes)
         {
             document.Chunks.Add(new DocumentChunk
             {
                 Id = Guid.NewGuid(),
                 DocumentId = document.Id,
-                ChunkIndex = drafts[i].ChunkIndex,
-                Content = drafts[i].Content,
-                PageNumber = drafts[i].PageNumber,
-                Embedding = new Vector(embeddings[i]),
+                ChunkIndex = draft.ChunkIndex,
+                Content = draft.Content,
+                PageNumber = draft.PageNumber,
+                Embedding = new Vector(vector),
             });
         }
 
         db.Documents.Add(document);
         await db.SaveChangesAsync(cancellationToken);
-        logger.LogInformation(
-            "Saved document {DocumentId} with {ChunkCount} chunk(s)",
-            document.Id, document.TotalChunks);
 
-        return new IngestionResult(document.Id, fileName, document.TotalChunks);
+        if (embedded.Skipped > 0)
+        {
+            logger.LogWarning(
+                "Saved document {DocumentId} with partial success: {Saved} chunk(s) stored, {Skipped} skipped",
+                document.Id, embedded.Successes.Count, embedded.Skipped);
+        }
+        else
+        {
+            logger.LogInformation(
+                "Saved document {DocumentId} with {ChunkCount} chunk(s)",
+                document.Id, document.TotalChunks);
+        }
+
+        return new IngestionResult(document.Id, fileName, embedded.Successes.Count, embedded.Skipped);
     }
 
-    private async Task<List<ReadOnlyMemory<float>>> EmbedAsync(
+    private async Task<EmbedOutcome> EmbedAsync(
         IReadOnlyList<ChunkDraft> drafts,
         CancellationToken cancellationToken)
     {
-        var vectors = new List<ReadOnlyMemory<float>>(drafts.Count);
-        if (drafts.Count == 0)
-        {
-            return vectors;
-        }
+        var successes = new List<(ChunkDraft Draft, ReadOnlyMemory<float> Vector)>(drafts.Count);
+        var skipped = 0;
+        Exception? lastError = null;
 
         for (var offset = 0; offset < drafts.Count; offset += EmbeddingBatchSize)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var batch = drafts
-                .Skip(offset)
-                .Take(EmbeddingBatchSize)
-                .Select(d => d.Content)
-                .ToList();
+            var batchDrafts = drafts.Skip(offset).Take(EmbeddingBatchSize).ToList();
+            var stopwatch = Stopwatch.StartNew();
 
-            var generated = await embeddingGenerator.GenerateAsync(batch, cancellationToken: cancellationToken);
-            vectors.AddRange(generated.Select(e => e.Vector));
+            try
+            {
+                var generated = await embeddingGenerator.GenerateAsync(
+                    batchDrafts.Select(d => d.Content), cancellationToken: cancellationToken);
+                var vectors = generated.Select(e => e.Vector).ToList();
 
-            var done = Math.Min(offset + EmbeddingBatchSize, drafts.Count);
-            logger.LogInformation("Embedded {Done}/{Total} chunk(s)", done, drafts.Count);
+                for (var i = 0; i < batchDrafts.Count && i < vectors.Count; i++)
+                {
+                    successes.Add((batchDrafts[i], vectors[i]));
+                }
 
-            if (done < drafts.Count)
+                logger.LogInformation(
+                    "Embedded batch of {Count} chunk(s) in {ElapsedMs} ms ({Done}/{Total})",
+                    batchDrafts.Count, stopwatch.ElapsedMilliseconds, successes.Count + skipped, drafts.Count);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                lastError = ex;
+
+                // Auth errors affect every call — abort rather than hammer the API.
+                if (IsAuthError(ex))
+                {
+                    logger.LogError(ex, "Embedding failed due to authentication; aborting ingestion");
+                    throw;
+                }
+
+                logger.LogWarning(ex,
+                    "Batch embedding failed after retries; falling back to per-chunk embedding");
+
+                foreach (var draft in batchDrafts)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    try
+                    {
+                        var vector = await embeddingGenerator.GenerateVectorAsync(
+                            draft.Content, cancellationToken: cancellationToken);
+                        successes.Add((draft, vector));
+                    }
+                    catch (Exception itemEx) when (itemEx is not OperationCanceledException)
+                    {
+                        skipped++;
+                        lastError = itemEx;
+                        logger.LogWarning(itemEx, "Skipping chunk #{Index} after embedding failure", draft.ChunkIndex);
+                    }
+                }
+            }
+
+            if (offset + EmbeddingBatchSize < drafts.Count)
             {
                 await Task.Delay(DelayBetweenBatchesMs, cancellationToken);
             }
         }
 
-        return vectors;
+        return new EmbedOutcome(successes, skipped, lastError);
     }
+
+    private static bool IsAuthError(Exception ex) =>
+        ex is ClientResultException { Status: 401 or 403 }
+        || (ex is ClientResultException c && c.Status == 400
+            && c.Message.Contains("API key", StringComparison.OrdinalIgnoreCase));
+
+    private sealed record EmbedOutcome(
+        IReadOnlyList<(ChunkDraft Draft, ReadOnlyMemory<float> Vector)> Successes,
+        int Skipped,
+        Exception? LastError);
 
     private static List<ExtractedPage> ExtractPdf(byte[] bytes)
     {

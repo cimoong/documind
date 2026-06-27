@@ -12,4 +12,10 @@ public sealed record ExtractedPage(int? PageNumber, string Text);
 public sealed record ChunkDraft(int ChunkIndex, string Content, int? PageNumber);
 
 /// <summary>Summary returned after ingesting a document.</summary>
-public sealed record IngestionResult(Guid DocumentId, string FileName, int ChunkCount);
+/// <param name="ChunkCount">Chunks successfully embedded and stored.</param>
+/// <param name="SkippedChunks">Chunks skipped because embedding failed (partial success).</param>
+public sealed record IngestionResult(
+    Guid DocumentId,
+    string FileName,
+    int ChunkCount,
+    int SkippedChunks = 0);
