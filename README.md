@@ -1,16 +1,52 @@
-# DocuMind
+<div align="center">
 
-**Ask your documents questions and get answers with citations — grounded in your own files, not the model's imagination.**
+# 📄 DocuMind
 
-DocuMind is a Retrieval-Augmented Generation (RAG) document Q&A application built on .NET 10 and Blazor Server.
+### Ask your documents questions — get answers **with citations**, grounded in your own files, not the model's imagination.
+
+A production-minded **Retrieval-Augmented Generation (RAG)** document Q&A app built end-to-end on **.NET 10** and **Blazor Server**.
+
+![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
+![Blazor Server](https://img.shields.io/badge/Blazor-Server-512BD4?logo=blazor&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-pgvector-4169E1?logo=postgresql&logoColor=white)
+![Google Gemini](https://img.shields.io/badge/Google-Gemini-8E75B2?logo=googlegemini&logoColor=white)
+![EF Core](https://img.shields.io/badge/EF%20Core-10-512BD4?logo=dotnet&logoColor=white)
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 
 ![Demo](docs/demo.gif)
 
-## Problem
+</div>
 
-Large language models are fluent but unreliable on private or domain-specific content: they don't know your documents, and when asked anyway they tend to hallucinate confident-but-wrong answers. Reading long PDFs by hand to find one fact is slow.
+---
 
-DocuMind solves this by grounding answers in *your* documents. You upload files; DocuMind indexes them into a vector database; when you ask a question it retrieves the most relevant passages and asks the LLM to answer **only** from those passages — and to say so honestly when the answer isn't there. Every answer comes back with citations to the source file and page, so you can verify it.
+## Why this project?
+
+LLMs are fluent but unreliable on *your* private content: they don't know your documents, and when asked anyway they hallucinate confident-but-wrong answers. Reading long PDFs by hand to find one fact is slow.
+
+**DocuMind grounds every answer in your documents.** Upload files → they're indexed into a vector database → ask a question → the app retrieves the most relevant passages and asks the LLM to answer **only** from those passages, citing the source file and page. When the answer isn't in your documents, it says so honestly instead of making something up.
+
+## What this project demonstrates
+
+> Built as a portfolio piece to show an end-to-end, production-minded AI feature — not just a prompt in a loop.
+
+- **Full RAG pipeline** — ingestion → chunking → embeddings → vector search → grounded generation with citations.
+- **Vector search in PostgreSQL** — `pgvector` with an **HNSW** index and **cosine** distance, queried through EF Core.
+- **Provider-agnostic AI** — coded against `Microsoft.Extensions.AI` (`IChatClient` / `IEmbeddingGenerator`); Gemini is swappable.
+- **Clean architecture** — domain/abstractions in `Core`, implementations in `Infrastructure`, thin host in `Web`.
+- **Production concerns, not just a demo** — retry/backoff, timeouts, input validation, structured logging, graceful error handling, and partial-failure tolerance.
+- **Evaluation mindset** — a small harness that scores retrieval and answer accuracy, so quality is measured, not assumed.
+
+## Contents
+
+- [Features](#features)
+- [Architecture](#architecture)
+- [Tech stack](#tech-stack)
+- [Quick start](#quick-start)
+- [Usage](#usage)
+- [Engineering decisions](#engineering-decisions)
+- [Evaluation](#evaluation)
+- [Limitations](#limitations)
+- [License](#license)
 
 ## Features
 
@@ -18,13 +54,13 @@ DocuMind solves this by grounding answers in *your* documents. You upload files;
 - 🔎 **Semantic retrieval** — questions are embedded and matched against chunks using pgvector cosine similarity with an HNSW index.
 - 💬 **Answers with citations** — responses are grounded strictly in retrieved context and include source markers (file name, page, snippet) with an expandable full-context view.
 - 🚫 **Honest "not found"** — a firm system prompt makes the model admit when the answer isn't in the documents instead of hallucinating.
-- 🧱 **Clean architecture** — domain/abstractions in Core, implementations in Infrastructure, thin Blazor/API host in Web.
-- 🛡️ **Production-minded resilience** — retry with exponential backoff for rate limits/transient failures, timeouts, input validation, and friendly error handling (no stack traces leak to users).
-- 🧪 **Built-in evaluation harness** — a small runner scores retrieval and answer accuracy over a question set.
+- 🧱 **Clean architecture** — clear separation between domain, infrastructure, and host.
+- 🛡️ **Production-minded resilience** — exponential-backoff retry for rate limits/transient failures, timeouts, validation, and friendly errors (no stack traces reach users).
+- 🧪 **Built-in evaluation harness** — scores retrieval and answer accuracy over an editable question set.
 
 ## Architecture
 
-Three projects, dependencies pointing inward to `Core`:
+Three projects, with all dependencies pointing **inward** to `Core`:
 
 | Project | Responsibility |
 | --- | --- |
@@ -32,7 +68,7 @@ Three projects, dependencies pointing inward to `Core`:
 | `DocuMind.Infrastructure` | EF Core `DbContext`, pgvector access, Gemini clients, ingestion & RAG implementations. |
 | `DocuMind.Web` | Blazor Server UI + minimal API endpoints; composition root. |
 
-### Ingestion flow
+**Ingestion** — how a document becomes searchable:
 
 ```mermaid
 flowchart LR
@@ -42,7 +78,7 @@ flowchart LR
     D --> E[(PostgreSQL + pgvector<br/>DocumentChunks)]
 ```
 
-### Query flow
+**Query** — how a question becomes a grounded answer:
 
 ```mermaid
 flowchart LR
@@ -52,8 +88,6 @@ flowchart LR
     P --> G[Generate answer<br/>gemini-2.5-flash]
     G --> A[Answer + citations]
 ```
-
-**Retrieval** uses pgvector's cosine distance operator (`<=>`) over the `Embedding vector(768)` column, ordered ascending and limited to top-K. The column is backed by an **HNSW** index with `vector_cosine_ops`, so nearest-neighbour search stays fast (approximate, ~O(log n)) and the operator matches the index's operator class. Cosine is chosen because text-embedding similarity lives in vector *direction*, not magnitude.
 
 ## Tech stack
 
@@ -69,65 +103,56 @@ flowchart LR
 | PDF parsing | PdfPig |
 | Resilience | Microsoft.Extensions.Http.Resilience (Polly) |
 
-## Getting started
+## Quick start
 
-### Prerequisites
-
-- [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (for PostgreSQL + pgvector)
-- A [Google Gemini API key](https://aistudio.google.com/app/apikey) (free tier works)
-
-### 1. Start the database
+> **Prerequisites:** [.NET 10 SDK](https://dotnet.microsoft.com/download), [Docker Desktop](https://www.docker.com/products/docker-desktop/), and a [Google Gemini API key](https://aistudio.google.com/app/apikey) (free tier works).
 
 ```bash
+# 1. Start PostgreSQL + pgvector (container documind-db, host port 5433)
 docker compose up -d
-```
 
-This runs PostgreSQL 17 with pgvector (container `documind-db`) on host port **5433** and enables the `vector` extension on first startup.
-
-### 2. Configure the Gemini API key
-
-The key is read from configuration and never committed. Set it once with user-secrets (it persists across runs):
-
-```bash
+# 2. Configure your Gemini API key (stored via user-secrets, never committed)
 dotnet user-secrets set "Gemini:ApiKey" "<your-gemini-api-key>" --project src/DocuMind.Web
-```
 
-### 3. Apply database migrations
-
-```bash
+# 3. Create the schema
 dotnet ef database update -p src/DocuMind.Infrastructure -s src/DocuMind.Infrastructure
-```
 
-> Requires the EF Core tools: `dotnet tool install --global dotnet-ef` (once).
-
-### 4. Run
-
-```bash
+# 4. Run
 dotnet run --project src/DocuMind.Web
 ```
 
-Open the URL shown in the console (default `http://localhost:5194`). A connectivity check is available at `GET /health/ai` (should return `vectorLength: 768`).
+Open the URL shown in the console (default `http://localhost:5194`). Sanity-check the AI connection at `GET /health/ai` — it should return `vectorLength: 768`.
+
+> First time only: `dotnet tool install --global dotnet-ef` for the EF Core CLI.
 
 ## Usage
 
-1. Go to **Documents** (`/documents`), choose a PDF or `.txt` file, and upload it. Wait for the success message; the file appears in the indexed-documents table with its chunk count.
+1. **Upload** a PDF or `.txt` on the **Documents** page. It's indexed and appears in the table with its chunk count.
 
    ![Upload](docs/upload.png)
 
-2. Go to **Ask** (`/ask`), type a question, optionally restrict the search to one document, and click **Ask**. The grounded answer appears with citations; expand any citation to read the full source context.
+2. **Ask** a question on the **Ask** page — optionally scoped to one document. The grounded answer appears with citations; expand any citation to read the full source context.
 
    ![Ask](docs/ask.png)
 
-3. Out-of-scope questions are answered honestly with "not found in the documents".
+3. **Out-of-scope questions** are answered honestly with "not found in the documents" instead of a hallucination.
 
    ![Citations](docs/citations.png)
 
-API endpoints are also available (see Swagger at `/swagger` in Development): `POST /api/documents` (multipart upload) and `POST /api/ask` (`{ question, topK?, documentId? }`).
+An HTTP API is also available (Swagger at `/swagger` in Development): `POST /api/documents` (multipart upload) and `POST /api/ask` (`{ question, topK?, documentId? }`).
+
+## Engineering decisions
+
+A few choices worth calling out, with the reasoning behind them:
+
+- **Cosine distance + HNSW index.** Text-embedding similarity lives in vector *direction*, not magnitude, so cosine is the right metric. Retrieval uses pgvector's `<=>` operator over a `vector(768)` column, backed by an **HNSW** index with `vector_cosine_ops` — approximate nearest-neighbour search stays fast (~O(log n)) and the query operator matches the index's operator class so the index is actually used.
+- **~800-token chunks with ~100-token overlap.** Large enough to hold a coherent idea for a sharp embedding, small enough to stay precise; the overlap prevents facts that straddle a chunk boundary from becoming unretrievable. Chunking is sentence-aware to avoid cutting mid-thought.
+- **Grounding over fluency.** A firm system prompt forbids answering outside the retrieved context and requires citations — the main defence against hallucination.
+- **Resilience by design.** Gemini calls go through a Polly resilience pipeline (retry with exponential backoff + jitter for `429`/transient errors, timeouts, circuit breaker). Ingestion tolerates partial embedding failures and aborts fast on quota exhaustion with a clear message rather than silently dropping content.
 
 ## Evaluation
 
-DocuMind ships with a small evaluation harness in [`eval/`](eval/) that measures two things over a set of questions:
+Quality is measured, not assumed. The harness in [`eval/`](eval/) runs the real RAG pipeline over a question set and reports two metrics:
 
 - **Retrieval accuracy** — did the expected document appear in the answer's citations?
 - **Answer accuracy** — does the answer contain the expected keywords?
@@ -135,32 +160,32 @@ DocuMind ships with a small evaluation harness in [`eval/`](eval/) that measures
 Edit [`eval/questions.json`](eval/questions.json) to match your own documents, then run:
 
 ```bash
-# Make sure the DB is up, the API key is set, and your documents are ingested first.
+# DB up, API key set, and your documents ingested first.
 dotnet run --project eval/DocuMind.Eval
 ```
 
-It prints per-question results and a summary like `Retrieval: 8/10 · Answer: 7/10`.
+Output is per-question results plus a summary like `Retrieval: 8/10 · Answer: 7/10`.
 
 ## Limitations
 
-This is an intentional MVP. Known, deliberate trade-offs:
+An intentional MVP — these are deliberate scoping decisions, not oversights:
 
-- **Answer quality depends on chunking.** A fixed ~800-token / ~100-overlap, sentence-aware strategy is a reasonable default but not tuned per document type; poor extraction (e.g. scanned PDFs without OCR) yields poor answers.
-- **Free-tier rate limits.** Gemini's free tier rate-limits requests; large uploads embed in throttled batches and may still hit `429` (handled with retry/backoff, but slow).
-- **No authentication / multi-tenancy.** All documents are shared in one database; there is no user login or per-user isolation.
-- **Small evaluation set.** The eval harness is a smoke test of relevance, not a rigorous benchmark; keyword matching is a coarse proxy for correctness.
-- **No re-ranking or query rewriting.** Retrieval is a single vector search; there's no hybrid (keyword + vector) search, re-ranker, or multi-step reasoning.
-- **PDF text only.** Images, tables, and complex layouts are flattened to text; non-text content isn't understood.
+- **Answer quality depends on chunking & extraction.** The fixed chunking strategy isn't tuned per document type, and scanned PDFs without OCR extract poorly.
+- **Free-tier rate limits.** Gemini's free tier throttles requests; large uploads embed in batches and can hit `429` (handled with retry/backoff, but slow).
+- **No authentication / multi-tenancy.** All documents share one database; there's no login or per-user isolation.
+- **Small evaluation set.** The harness is a relevance smoke test, not a rigorous benchmark; keyword matching is a coarse proxy for correctness.
+- **Single-stage retrieval.** No hybrid (keyword + vector) search, re-ranking, or query rewriting.
+- **Text-only.** Images, tables, and complex layouts are flattened to text.
 
-These are scoping decisions to keep the project focused and reviewable, not oversights.
+**Natural next steps:** hybrid search + a re-ranker, OCR for scanned PDFs, streaming answers, authentication, and a larger evaluation set.
 
 ## License
 
-[MIT](LICENSE).
+[MIT](LICENSE) — free to use, learn from, and build on.
 
 ## Acknowledgements
 
-- [Microsoft.Extensions.AI](https://learn.microsoft.com/dotnet/ai/) for the provider-agnostic AI abstractions.
-- [pgvector](https://github.com/pgvector/pgvector) and [pgvector-dotnet](https://github.com/pgvector/pgvector-dotnet) for vector search in PostgreSQL.
-- [PdfPig](https://github.com/UglyToad/PdfPig) for PDF text extraction.
-- [Google Gemini](https://ai.google.dev/) for the chat and embedding models.
+- [Microsoft.Extensions.AI](https://learn.microsoft.com/dotnet/ai/) — provider-agnostic AI abstractions.
+- [pgvector](https://github.com/pgvector/pgvector) & [pgvector-dotnet](https://github.com/pgvector/pgvector-dotnet) — vector search in PostgreSQL.
+- [PdfPig](https://github.com/UglyToad/PdfPig) — PDF text extraction.
+- [Google Gemini](https://ai.google.dev/) — chat and embedding models.
