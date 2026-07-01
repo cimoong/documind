@@ -173,9 +173,11 @@ Open the URL shown in the console (default `http://localhost:5194`). Sanity-chec
 
    ![Ask](docs/ask.png)
 
-3. **Out-of-scope questions** are answered honestly with "not found in the documents" instead of a hallucination.
+3. **Verify the sources.** Every answer lists its citations — file name, page, and chunk — and each snippet expands to the full source context.
 
    ![Citations](docs/citations.png)
+
+> **Honest by design:** ask something that isn't in your documents and DocuMind replies that it can't find the answer, instead of inventing one.
 
 An HTTP API is also available (Swagger at `/swagger` in Development): `POST /api/documents` (multipart upload) and `POST /api/ask` (`{ question, topK?, documentId? }`).
 
