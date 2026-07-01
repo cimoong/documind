@@ -60,7 +60,17 @@ LLMs are fluent but unreliable on *your* private content: they don't know your d
 
 ## Architecture
 
-Three projects, with all dependencies pointing **inward** to `Core`:
+Three projects following clean/onion architecture — every dependency points **inward** to `Core`, so the domain has zero external dependencies and the AI/DB providers stay swappable:
+
+```mermaid
+flowchart TD
+    Web["🌐 DocuMind.Web<br/><i>Blazor UI · API · composition root</i>"]
+    Infra["⚙️ DocuMind.Infrastructure<br/><i>EF Core · pgvector · Gemini · services</i>"]
+    Core["💎 DocuMind.Core<br/><i>domain models · interfaces · abstractions</i>"]
+    Web --> Infra
+    Web --> Core
+    Infra --> Core
+```
 
 | Project | Responsibility |
 | --- | --- |
@@ -87,6 +97,34 @@ flowchart LR
     R --> P[Build grounded prompt<br/>context + source markers]
     P --> G[Generate answer<br/>gemini-2.5-flash]
     G --> A[Answer + citations]
+```
+
+### Retrieval in code
+
+The embedding column and its ANN index are configured once in the `DbContext`:
+
+```csharp
+// DocuMindDbContext — store embeddings as vector(768), indexed for cosine search
+entity.Property(c => c.Embedding)
+      .HasColumnType($"vector({DocumentChunk.EmbeddingDimensions})"); // vector(768)
+
+entity.HasIndex(c => c.Embedding)
+      .HasMethod("hnsw")
+      .HasOperators("vector_cosine_ops");
+```
+
+Retrieval is then a single strongly-typed EF Core query — no raw SQL. Ordering by `CosineDistance` translates to pgvector's `<=>` operator and uses the HNSW index:
+
+```csharp
+// RagService — top-K nearest chunks by cosine distance, optionally scoped to one document
+var hits = await chunks
+    .OrderBy(c => c.Embedding!.CosineDistance(query))  // → ORDER BY embedding <=> :query  (HNSW)
+    .Take(topK)
+    .Select(c => new RetrievedChunk(
+        c.DocumentId, c.Document.FileName, c.ChunkIndex,
+        c.PageNumber, c.Content,
+        c.Embedding!.CosineDistance(query)))
+    .ToListAsync(cancellationToken);
 ```
 
 ## Tech stack
