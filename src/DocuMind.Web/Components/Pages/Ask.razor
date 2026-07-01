@@ -11,7 +11,7 @@
 <h1>Ask</h1>
 <p class="text-muted">Ask a question; answers are grounded only in your indexed documents.</p>
 
-<div class="card mb-4" style="max-width: 760px;">
+<div class="card mb-4">
     <div class="card-body">
         <div class="mb-3">
             <label class="form-label fw-semibold" for="question">Question</label>
@@ -55,7 +55,7 @@
 
 @if (response is not null)
 {
-    <div class="card mb-3" style="max-width: 760px;">
+    <div class="card mb-3 dm-answer">
         <div class="card-body">
             <h2 class="h5">Answer</h2>
             <p style="white-space: pre-wrap;">@response.Answer</p>
@@ -65,16 +65,16 @@
 
     @if (response.Citations.Count > 0)
     {
-        <h2 class="h5" style="max-width: 760px;">Citations</h2>
-        <div style="max-width: 760px;">
+        <h2 class="h5">Citations</h2>
+        <div>
             @for (var i = 0; i < response.Citations.Count; i++)
             {
                 var index = i;
                 var citation = response.Citations[index];
-                <div class="card mb-2">
+                <div class="card mb-2 dm-citation">
                     <div class="card-body py-2">
                         <div class="fw-semibold">
-                            [Source @(index + 1)] @citation.FileName
+                            <span class="dm-source-tag">[Source @(index + 1)]</span> @citation.FileName
                             @if (citation.PageNumber is int pageNo)
                             {
                                 <span class="text-muted">· page @pageNo</span>
@@ -158,7 +158,9 @@
 
     private static string FriendlyError(Exception ex) => ex switch
     {
-        System.ClientModel.ClientResultException => "The AI service rejected the request. Check that the Gemini API key is configured.",
+        System.ClientModel.ClientResultException { Status: 429 } => "Gemini quota or rate limit reached. Please wait and try again later, or check your plan and billing.",
+        System.ClientModel.ClientResultException { Status: 401 or 403 } => "The AI service rejected the API key. Check that the Gemini API key is configured.",
+        System.ClientModel.ClientResultException => "The AI service returned an error. Please try again.",
         HttpRequestException or TaskCanceledException => "Could not reach the AI service. Please check your connection and try again.",
         _ => "Something went wrong while answering. Please try again."
     };

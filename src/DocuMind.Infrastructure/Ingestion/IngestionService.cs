@@ -137,10 +137,12 @@ public sealed class IngestionService(
             {
                 lastError = ex;
 
-                // Auth errors affect every call — abort rather than hammer the API.
-                if (IsAuthError(ex))
+                // Auth errors and rate-limit/quota (429) affect every call — there's
+                // no point hammering the API per chunk, so abort and surface a clear
+                // message to the user instead of silently skipping chunks.
+                if (IsAuthError(ex) || IsRateLimited(ex))
                 {
-                    logger.LogError(ex, "Embedding failed due to authentication; aborting ingestion");
+                    logger.LogError(ex, "Embedding aborted (auth or rate limit/quota reached)");
                     throw;
                 }
 
@@ -178,6 +180,9 @@ public sealed class IngestionService(
         ex is ClientResultException { Status: 401 or 403 }
         || (ex is ClientResultException c && c.Status == 400
             && c.Message.Contains("API key", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsRateLimited(Exception ex) =>
+        ex is ClientResultException { Status: 429 };
 
     private sealed record EmbedOutcome(
         IReadOnlyList<(ChunkDraft Draft, ReadOnlyMemory<float> Vector)> Successes,

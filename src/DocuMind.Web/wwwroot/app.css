@@ -1,15 +1,70 @@
+:root {
+    --dm-primary: #4f46e5;       /* indigo */
+    --dm-primary-dark: #3730a3;
+    --dm-accent: #0d9488;        /* teal */
+    --dm-bg: #f6f7fb;
+    --dm-card-border: #e6e8f2;
+}
+
 html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    background-color: var(--dm-bg);
 }
 
 a, .btn-link {
-    color: #006bb7;
+    color: var(--dm-primary);
 }
 
 .btn-primary {
     color: #fff;
-    background-color: #1b6ec2;
-    border-color: #1861ac;
+    background: linear-gradient(90deg, var(--dm-primary) 0%, var(--dm-primary-dark) 100%);
+    border: none;
+}
+
+.btn-primary:hover:not(:disabled) {
+    filter: brightness(1.08);
+}
+
+/* Page headings get a small gradient underline accent. */
+.content h1 {
+    font-weight: 700;
+    color: #1e1b4b;
+}
+
+.content h1::after {
+    content: "";
+    display: block;
+    width: 3rem;
+    height: 4px;
+    margin-top: 0.4rem;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--dm-primary), var(--dm-accent));
+}
+
+/* Cards: soft, rounded, subtle shadow. */
+.content .card {
+    border: 1px solid var(--dm-card-border);
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+/* Answer card: indigo accent. */
+.dm-answer {
+    border-left: 4px solid var(--dm-primary);
+    background: linear-gradient(180deg, #fbfbff 0%, #ffffff 60%);
+}
+
+.dm-answer h2 {
+    color: var(--dm-primary-dark);
+}
+
+/* Citation cards: teal accent. */
+.dm-citation {
+    border-left: 3px solid var(--dm-accent);
+}
+
+.dm-source-tag {
+    color: var(--dm-accent);
 }
 
 .btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {

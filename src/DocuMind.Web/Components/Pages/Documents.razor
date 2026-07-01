@@ -11,7 +11,7 @@
 <h1>Documents</h1>
 <p class="text-muted">Upload a PDF or .txt file to index it for question answering.</p>
 
-<div class="card mb-4" style="max-width: 640px;">
+<div class="card mb-4">
     <div class="card-body">
         <label class="form-label fw-semibold">Upload document</label>
         <InputFile OnChange="HandleUpload" accept=".pdf,.txt" disabled="@isUploading" class="form-control" />
@@ -146,7 +146,9 @@ else
 
     private static string FriendlyError(Exception ex) => ex switch
     {
-        System.ClientModel.ClientResultException => "The AI service rejected the request. Check that the Gemini API key is configured.",
+        System.ClientModel.ClientResultException { Status: 429 } => "Gemini quota or rate limit reached. Please wait and try again later, or check your plan and billing.",
+        System.ClientModel.ClientResultException { Status: 401 or 403 } => "The AI service rejected the API key. Check that the Gemini API key is configured.",
+        System.ClientModel.ClientResultException => "The AI service returned an error. Please try again.",
         HttpRequestException or TaskCanceledException => "Could not reach the AI service. Please check your connection and try again.",
         _ => "Something went wrong while indexing the document. Please try again."
     };

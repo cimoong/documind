@@ -1,0 +1,52 @@
+[
+  {
+    "question": "What is the title of the document?",
+    "expectedAnswerContains": ["title"],
+    "expectedDocument": "sample.pdf"
+  },
+  {
+    "question": "Who is the author of the document?",
+    "expectedAnswerContains": ["author"],
+    "expectedDocument": "sample.pdf"
+  },
+  {
+    "question": "What is the main topic covered?",
+    "expectedAnswerContains": ["topic"],
+    "expectedDocument": "sample.pdf"
+  },
+  {
+    "question": "Summarize the introduction.",
+    "expectedAnswerContains": ["introduction"],
+    "expectedDocument": "sample.pdf"
+  },
+  {
+    "question": "What steps or procedures are described?",
+    "expectedAnswerContains": ["step"],
+    "expectedDocument": "sample.pdf"
+  },
+  {
+    "question": "What are the key requirements mentioned?",
+    "expectedAnswerContains": ["requirement"],
+    "expectedDocument": "sample.pdf"
+  },
+  {
+    "question": "What conclusion does the document reach?",
+    "expectedAnswerContains": ["conclusion"],
+    "expectedDocument": "sample.pdf"
+  },
+  {
+    "question": "Which date or year is referenced?",
+    "expectedAnswerContains": ["20"],
+    "expectedDocument": "sample.pdf"
+  },
+  {
+    "question": "List any tables or figures referenced.",
+    "expectedAnswerContains": ["table", "figure"],
+    "expectedDocument": "sample.pdf"
+  },
+  {
+    "question": "Who won the 1998 FIFA World Cup?",
+    "expectedAnswerContains": ["not", "found"],
+    "expectedDocument": ""
+  }
+]
