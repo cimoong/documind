@@ -24,12 +24,13 @@ public static class AiErrorMapping
                             "\"Gemini:ApiKey\" is set correctly via user-secrets.",
                     statusCode: StatusCodes.Status401Unauthorized);
 
-            // Rate limited even after retries.
+            // Rate limited / quota exhausted even after retries.
             case ClientResultException { Status: 429 } cre:
-                logger.LogWarning(cre, "Gemini rate limit reached");
+                logger.LogWarning(cre, "Gemini rate limit / quota reached");
                 return Results.Problem(
-                    title: "AI rate limit reached",
-                    detail: "The AI service is rate limiting requests. Please wait a moment and try again.",
+                    title: "AI quota or rate limit reached",
+                    detail: "The Gemini quota or rate limit has been reached. Please wait and try " +
+                            "again later, or check your Gemini plan and billing.",
                     statusCode: StatusCodes.Status429TooManyRequests);
 
             case ClientResultException cre:

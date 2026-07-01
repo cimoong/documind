@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DocuMind.Core\DocuMind.Core.csproj" />
+    <ProjectReference Include="..\..\src\DocuMind.Infrastructure\DocuMind.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.9" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Share the Web project's user-secrets so the same Gemini:ApiKey is reused. -->
+    <UserSecretsId>126415bb-bd32-454c-834a-b108c6087e06</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The editable question set lives at eval/questions.json; copy it next to the exe. -->
+    <Content Include="..\questions.json" Link="questions.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>
