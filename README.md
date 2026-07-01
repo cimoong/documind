@@ -4,6 +4,8 @@
 
 DocuMind is a Retrieval-Augmented Generation (RAG) document Q&A application built on .NET 10 and Blazor Server.
 
+![Demo](docs/demo.gif)
+
 ## Problem
 
 Large language models are fluent but unreliable on private or domain-specific content: they don't know your documents, and when asked anyway they tend to hallucinate confident-but-wrong answers. Reading long PDFs by hand to find one fact is slow.
@@ -108,8 +110,6 @@ dotnet run --project src/DocuMind.Web
 Open the URL shown in the console (default `http://localhost:5194`). A connectivity check is available at `GET /health/ai` (should return `vectorLength: 768`).
 
 ## Usage
-
-![Demo](docs/demo.gif)
 
 1. Go to **Documents** (`/documents`), choose a PDF or `.txt` file, and upload it. Wait for the success message; the file appears in the indexed-documents table with its chunk count.
 
