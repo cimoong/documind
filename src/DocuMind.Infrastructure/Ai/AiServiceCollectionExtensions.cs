@@ -39,6 +39,11 @@ public static class AiServiceCollectionExtensions
         // exponential backoff + jitter (handles HTTP 429 and 5xx/transient
         // failures), per-attempt and total timeouts, and a circuit breaker.
         services.AddHttpClient(HttpClientName)
+            // The OpenAIClient is a singleton that captures one HttpClient for the
+            // app's lifetime, so the factory must NOT rotate/dispose its handler
+            // (the default 2-minute rotation disposes the resilience pipeline and
+            // breaks long-running uploads). Pin the handler for the app lifetime.
+            .SetHandlerLifetime(Timeout.InfiniteTimeSpan)
             .AddStandardResilienceHandler(o =>
             {
                 // LLM calls can be slow; give each attempt room, and bound the total.
